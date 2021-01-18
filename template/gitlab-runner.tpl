@@ -53,9 +53,12 @@ if ! [ -x "$(command -v jq)" ]; then
   yum install jq -y
 fi
 
+echo "Getting runner token..."
+
 token=$(aws ssm get-parameters --names "${secure_parameter_store_runner_token_key}" --with-decryption --region "${secure_parameter_store_region}" | jq -r ".Parameters | .[0] | .Value")
 if [[ `echo ${runners_token}` == "__REPLACED_BY_USER_DATA__" && `echo $token` == "null" ]]
 then
+  echo "Registering Gitlab runner at ${runners_gitlab_url}/api/v4/runners"
   token=$(curl --request POST -L "${runners_gitlab_url}/api/v4/runners" \
     --form "token=${gitlab_runner_registration_token}" \
     --form "tag_list=${gitlab_runner_tag_list}" \
@@ -66,6 +69,8 @@ then
     --form "access_level=${gitlab_runner_access_level}" \
     | jq -r .token)
   aws ssm put-parameter --overwrite --type SecureString  --name "${secure_parameter_store_runner_token_key}" --value="$token" --region "${secure_parameter_store_region}"
+else
+  echo "Retrieved runner token from ${secure_parameter_store_runner_token_key}"
 fi
 
 sed -i.bak s/__REPLACED_BY_USER_DATA__/`echo $token`/g /etc/gitlab-runner/config.toml
